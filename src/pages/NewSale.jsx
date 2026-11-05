@@ -557,30 +557,30 @@ export default function NewSale() {
 
       await refresh();
       let receiptFailed = false;
-      try {
-        await generateSaleReceipt({
-          sale,
-          customer: customerById(sale.customer_id),
-          lines: s.items.map((item) => ({
-            ...item,
-            subtotal: saleLine(item),
-          })),
-          products: new Map(s.items.map((item) => [Number(item.product_id), productById(item.product_id)])),
-          payments: paidNow > 0 ? [{ amount: paidNow, payment_method: plan.method }] : [],
-          amountReceived: cashReceipt?.amountReceived ?? null,
-          change: cashReceipt?.change ?? null,
-          delivery: isDelivery ? { scheduled_delivery_date: s.delDate } : null,
-        });
-      } catch (receiptError) {
-        console.error('Sale receipt failed:', receiptError);
-        receiptFailed = true;
+      if (!pendingPayment) {
+        try {
+          await generateSaleReceipt({
+            sale,
+            customer: customerById(sale.customer_id),
+            lines: s.items.map((item) => ({
+              ...item,
+              subtotal: saleLine(item),
+            })),
+            products: new Map(s.items.map((item) => [Number(item.product_id), productById(item.product_id)])),
+            payments: paidNow > 0 ? [{ amount: paidNow, payment_method: plan.method }] : [],
+            amountReceived: cashReceipt?.amountReceived ?? null,
+            change: cashReceipt?.change ?? null,
+            delivery: isDelivery ? { scheduled_delivery_date: s.delDate } : null,
+          });
+        } catch (receiptError) {
+          console.error('Sale receipt failed:', receiptError);
+          receiptFailed = true;
+        }
       }
       showToast(receiptFailed
-        ? pendingPayment
-          ? 'Sale recorded; payment is pending confirmation, but the receipt could not be generated'
-          : 'Sale recorded, but the receipt could not be generated'
+        ? 'Sale recorded, but the receipt could not be generated'
         : pendingPayment
-          ? 'Sale recorded; payment is pending confirmation. Receipt downloaded ✓'
+          ? 'Sale recorded; payment is pending confirmation. Receipt will be available after confirmation.'
           : 'Sale recorded and receipt downloaded ✓');
       setTimeout(() => navigate('/sales/history'), 650);
     } catch (err) {

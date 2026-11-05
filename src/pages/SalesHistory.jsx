@@ -33,6 +33,10 @@ import { db } from '../firebaseConfig';
 
 const SH_DEFAULT = { search: '', paymentStatus: '', dueStatus: '', delivery: '', from: '', to: '', sortKey: 'date', sortDir: 'desc', page: 1 };
 
+const canGenerateSaleReceipt = (sale) => sale?.sale_status !== 'Cancelled'
+  && sale?.payment_status === 'Fully Paid'
+  && sale?.payment_confirmation?.status !== 'Pending Confirmation';
+
 export default function SalesHistory() {
   const {
     data, refresh,
@@ -400,6 +404,10 @@ export default function SalesHistory() {
   const confirmPaymentSale = confirmPaymentId ? saleById(confirmPaymentId) : null;
 
   const generateReceipt = async (sale) => {
+    if (!canGenerateSaleReceipt(sale)) {
+      showToast('A receipt is available only after the sale is fully paid and payment confirmation is complete.');
+      return;
+    }
     try {
       const lines = saleDetailsOf(sale.sale_id);
       await generateSaleReceipt({
@@ -700,10 +708,12 @@ export default function SalesHistory() {
                 Confirm
               </Button>
             )}
-            <Button size="small" variant="outlined" startIcon={<ReceiptLongIcon />}
-              onClick={() => generateReceipt(detailSale)}>
-              Generate Receipt
-            </Button>
+            {canGenerateSaleReceipt(detailSale) && (
+              <Button size="small" variant="outlined" startIcon={<ReceiptLongIcon />}
+                onClick={() => generateReceipt(detailSale)}>
+                Generate Receipt
+              </Button>
+            )}
           </Box>
         )}
         onClose={() => setDetailId(null)}
