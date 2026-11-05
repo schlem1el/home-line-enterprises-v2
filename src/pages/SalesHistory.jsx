@@ -355,7 +355,7 @@ export default function SalesHistory() {
         }
         if (!paymentRef) throw new Error('Could not allocate a payment ID. Refresh and try again.');
 
-        transaction.set(paymentRef, {
+        const payment = {
           customer_payment_id: paymentId,
           sale_id: saleId,
           payment_term_id: null,
@@ -363,8 +363,8 @@ export default function SalesHistory() {
           payment_date: paymentDate,
           amount,
           payment_method: pending.payment_method
-        });
-        transaction.update(saleRef, {
+        };
+        const saleUpdates = {
           amount_paid: amountPaid,
           payment_status: paymentStatus,
           sale_status: saleStatus,
@@ -374,8 +374,15 @@ export default function SalesHistory() {
             confirmed_date: paymentDate,
             confirmed_by: user?.uid || null
           }
-        });
-        return { paymentId, paymentStatus };
+        };
+        transaction.set(paymentRef, payment);
+        transaction.update(saleRef, saleUpdates);
+        return {
+          paymentId,
+          paymentStatus,
+          sale: { ...currentSale, ...saleUpdates },
+          payments: paymentSnaps.map((snapshot) => snapshot.data()).filter(Boolean).concat(payment)
+        };
       });
 
       await refresh();
@@ -387,8 +394,29 @@ export default function SalesHistory() {
         payment_date: paymentDate,
         new_sale_payment_status: result.paymentStatus
       });
+      let receiptFailed = false;
+      if (canGenerateSaleReceipt(result.sale)) {
+        try {
+          const lines = saleDetailsOf(saleId);
+          await generateSaleReceipt({
+            sale: result.sale,
+            customer: customerById(result.sale.customer_id),
+            lines,
+            products: new Map(lines.map((line) => [Number(line.product_id), productById(line.product_id)])),
+            payments: result.payments,
+            delivery: data.customer_deliveries.find((item) => item.sale_id === saleId) || null,
+          });
+        } catch (receiptError) {
+          console.error('Sale receipt failed:', receiptError);
+          receiptFailed = true;
+        }
+      }
       setConfirmPaymentId(null);
-      showToast(`${pending.payment_method} payment confirmed — sale is ${result.paymentStatus} ✓`);
+      showToast(receiptFailed
+        ? `${pending.payment_method} payment confirmed, but the receipt could not be generated`
+        : canGenerateSaleReceipt(result.sale)
+          ? `${pending.payment_method} payment confirmed and receipt downloaded ✓`
+          : `${pending.payment_method} payment confirmed — sale is ${result.paymentStatus} ✓`);
     } catch (err) {
       console.error('Payment confirmation failed:', err);
       showToast(err.message || 'Could not confirm payment');
